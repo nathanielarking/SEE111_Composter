@@ -35,14 +35,14 @@ const int high_temp_bound = 55;
 int state = MENU;
 
 //Stores milis of cycle beginning, 
-unsigned long cycle_timestamp;
+unsigned long int cycle_timestamp;
 //Stores total time elapsed in the cycle
-unsigned long cycle_total_elapsed = 0;
+unsigned long int cycle_total_elapsed = 0;
 //Stores time elapsed in cycle since last unpause
-unsigned long cycle_last_elapsed = 0;
+unsigned long int cycle_last_elapsed = 0;
 
 //Total cycle duration millis
-const long cycle_duration = 30 * 1000;
+const unsigned long int cycle_duration = 45000;
 
 //Stores button state
 boolean button_flag = false;
