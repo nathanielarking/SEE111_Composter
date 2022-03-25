@@ -15,8 +15,8 @@
 #define BUZZER 6
 
 // Declare LCD object for software SPI
-// Adafruit_PCD8544(CLK,DIN,D/C,CE,RST);
-//Adafruit_PCD8544 display = Adafruit_PCD8544(9, 10, 11, 12, 13);
+//Adafruit_PCD8544(CLK,DIN,D/C,CE,RST);
+//Adafruit_PCD8544 display = Adafruit_PCD8544(7, 8, 9, 10, 11);
 
 //Create objects for reading from temperature sensor
 OneWire oneWire(TEMP); //Connect a wire object to the sensor
@@ -71,9 +71,17 @@ int motor_pulse_count;
 //Stores the timestamp of the next motor activation phase
 unsigned long int motor_next_activation;
 
-
-//Stores buzzer state
+//Stores whether or not the buzzer is activated
+boolean buzzer_flag = false;
+//Stores whether or not the buzzer is currently in a pulse
+boolean buzzer_pulse_flag = false;
+//Stores the time that the buzzer was activated
 unsigned long int buzzer_timestamp;
+//Stores the width, gaps, amount of pulses, and strength of buzzer for current buzzer activation
+int buzzer_pulse_width;
+int buzzer_pulse_gap;
+int buzzer_pulse_count;
+int buzzer_pulse_strength;
 
 //Amount of milliseconds before a short press becomes a long press
 const int button_threshold = 3000;
@@ -93,7 +101,7 @@ void setup() {
 
   //Initialize sensor
   temp_sensor.begin();
-
+  
 }
 
 void loop() {
@@ -114,8 +122,9 @@ void loop() {
   loop_heater();
   loop_mock_heating();
   loop_motor();
+  loop_buzzer();
 
-  delay(750);
+  delay(50);
 
 }
 
@@ -216,6 +225,7 @@ void loop_button(){
                 state = CYCLE_RUN;
                 cycle_timestamp = millis();
                 cycle_total_elapsed = 0;
+                //activate_buzzer(150, 50, 2, 50);
                 break;
 
               case CYCLE_RUN:
@@ -372,6 +382,83 @@ void activate_motor(int width, int gap, int count){
   
   }
 
+//Turns on/off the buzzer based on the buzzer state, stored in global variables
+void loop_buzzer(){
+
+  //If the motor has been activated
+  if(buzzer_flag){
+
+    //If we're in the middle of a pulse
+    if(millis() - buzzer_timestamp <= buzzer_pulse_width){
+
+      //If the flag is set to false, this is the first tick in the pulse, so activate the buzzer
+      if(!buzzer_pulse_flag){
+        
+        analogWrite(BUZZER, buzzer_pulse_strength);
+        Serial.println("Buzzer pulse on");
+        buzzer_pulse_flag = true;
+        
+        }
+
+      //If we're in the gap between pulses
+      }else if((millis() - buzzer_timestamp > buzzer_pulse_width) && (millis() - buzzer_timestamp < buzzer_pulse_width + buzzer_pulse_gap)){
+        
+        //If the flag is set to true, this is the first tick in the gap, so deactivate the buzzer
+        if(buzzer_pulse_flag){
+          
+          digitalWrite(BUZZER, LOW);
+          Serial.println("Buzzer pulse off");
+          buzzer_pulse_flag = false;
+          
+          }
+
+        //If we're at the end of a gap
+        }else if(millis() - buzzer_timestamp >= buzzer_pulse_width + buzzer_pulse_gap){
+          
+          //Update buzzer timestamp, update count variable
+          buzzer_timestamp = millis();
+          buzzer_pulse_count--;
+      
+          //Stop the pulses if the pulse count has been reached
+          if(buzzer_pulse_count <= 0){
+
+            buzzer_flag = false;
+            
+            }
+          
+          }
+    
+    //If the buzzer is not currently activated in the global variables, make sure it's turned off
+    }else{
+      
+      deactivate_buzzer();
+      
+      }
+  
+  }
+
+//Changes the global variables of the buzzer based on input
+void activate_buzzer(int width, int gap, int count, int strength){
+
+  //Change global variables
+  buzzer_pulse_width = width;
+  buzzer_pulse_gap = gap;
+  buzzer_pulse_count = count;
+  buzzer_pulse_strength = strength;
+  buzzer_flag = true;
+  buzzer_timestamp = millis();
+
+  //Update serial monitor
+  Serial.print("Buzzer activated, pulsing ");
+  Serial.print(count);
+  Serial.print(" times for ");
+  Serial.print(width);
+  Serial.print("ms at ");
+  Serial.print(gap);
+  Serial.println("ms apart");
+  
+  }
+
 //Stops motor and updates serial monitor
 void deactivate_motor(){
 
@@ -381,6 +468,8 @@ void deactivate_motor(){
     Serial.println("Motor Deactivated");
     
     }
+
+  motor_flag = false;
   
   }
 
@@ -405,6 +494,22 @@ void deactivate_heater(){
     Serial.println("Heater Deactivated");
     
     }
+
+  heater_flag = false;
+  
+  }
+
+//Stops buzzer and updates serial monitor
+void deactivate_buzzer(){
+
+  if(digitalRead(BUZZER) == HIGH){
+
+    digitalWrite(BUZZER, LOW);
+    Serial.println("Buzzer Deactivated");
+    
+    }
+
+  buzzer_flag = false;
   
   }
 
@@ -413,8 +518,7 @@ void deactivate_all(){
   
     deactivate_heater();
     deactivate_motor();
-    heater_flag = false;
-    motor_flag = false;
+    deactivate_buzzer();
   
   }
 
