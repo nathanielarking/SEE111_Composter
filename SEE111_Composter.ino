@@ -3,33 +3,33 @@
 #include <DallasTemperature.h>
 
 //Display libraries
-//#include <SPI.h>
-//#include <Adafruit_GFX.h>
-//#include <Adafruit_PCD8544.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_PCD8544.h>
 
 //Define PIN numbers
 #define TEMP 2
-#define HEATER 3
-#define MOTOR 4
-#define BUTTON 5
-#define BUZZER 6
+#define HEATER 4
+#define MOTOR 3
+#define BUTTON 6
+#define BUZZER 7
 
 // Declare LCD object for software SPI
 //Adafruit_PCD8544(CLK,DIN,D/C,CE,RST);
-//Adafruit_PCD8544 display = Adafruit_PCD8544(7, 8, 9, 10, 11);
+Adafruit_PCD8544 display = Adafruit_PCD8544(13, 11, 9, 10, 8);
 
 //Create objects for reading from temperature sensor
 OneWire oneWire(TEMP); //Connect a wire object to the sensor
 DallasTemperature temp_sensor(&oneWire); //Connect a DallasTemperature object to read from the sensor
 
 //Stores current temperature
-float current_temperature = 20;
+float current_temperature;
 
 //Store target temperatures
 const int low_temp_bound = 50;
 const int high_temp_bound = 55;
 
-//Stores details about the current state
+//Stores details about the current state/
 #define MENU 0
 #define CYCLE_RUN 1
 #define CYCLE_PAUSE 2
@@ -47,7 +47,7 @@ const unsigned long int cycle_duration = 120000;
 //Interval of motor activation
 const unsigned long int motor_interval = 30000;
 //Amount of time to wait in the beginning of the cycle before starting the heater
-const unsigned long int cycle_start_duration = 15000;
+const unsigned long int cycle_start_duration = 7500;
 //Stores a flag that allows us to check whether a tick in the cycle is the first tick
 boolean cycle_flag = false;
 
@@ -101,6 +101,13 @@ void setup() {
 
   //Initialize sensor
   temp_sensor.begin();
+
+  //Initialize display
+  display.begin();
+  display.setContrast(57 );
+  display.display(); // show splashscreen
+  delay(2000);
+  display.clearDisplay();   // clears the screen and buffer
   
 }
 
@@ -112,7 +119,7 @@ void loop() {
   Serial.println(millis());
 
   //Update and output current temperature to serial monitor
-  //current_temperature = read_temp();
+  current_temperature = read_temp();
   Serial.print("Current temperature:" );
   Serial.println(current_temperature);
 
@@ -120,11 +127,11 @@ void loop() {
   loop_cycle();
   loop_button();
   loop_heater();
-  loop_mock_heating();
   loop_motor();
   loop_buzzer();
+  loop_display();
 
-  delay(50);
+  delay(10);
 
 }
 
@@ -143,6 +150,7 @@ void loop_cycle(){
           Serial.println("Cycle complete");
           state = MENU;
           cycle_flag = false;
+          activate_buzzer(150, 75, 3, 100);
           deactivate_all();
         
         }
@@ -161,6 +169,8 @@ void loop_cycle(){
 
           //Set first motor timestamp
           motor_next_activation = cycle_start_duration + motor_interval;
+
+          activate_buzzer(750, 250, 2, 50);
           
           }
 
@@ -187,7 +197,11 @@ void loop_cycle(){
       Serial.print(", Time remaining in cycle: ");
       Serial.println(cycle_duration - cycle_total_elapsed - cycle_last_elapsed);
 
-    }
+    }else{
+      
+      deactivate_all();
+      
+      }
 
   }
 
@@ -225,7 +239,6 @@ void loop_button(){
                 state = CYCLE_RUN;
                 cycle_timestamp = millis();
                 cycle_total_elapsed = 0;
-                //activate_buzzer(150, 50, 2, 50);
                 break;
 
               case CYCLE_RUN:
@@ -234,6 +247,7 @@ void loop_button(){
                 state = CYCLE_PAUSE;
                 deactivate_all();
                 cycle_total_elapsed += cycle_last_elapsed;
+                activate_buzzer(75, 100, 1, 50);
                 break;
 
               case CYCLE_PAUSE:
@@ -242,6 +256,7 @@ void loop_button(){
                 state = CYCLE_RUN;
                 cycle_timestamp = millis();
                 cycle_last_elapsed = 0;
+                activate_buzzer(75, 100, 1, 50);
                 break;
               
               }         
@@ -253,6 +268,7 @@ void loop_button(){
               //On long press, return to menu
               Serial.println("Returning to menu");
               state = MENU;
+              activate_buzzer(250, 50, 5, 50);
               deactivate_all();
               
               }
@@ -264,21 +280,6 @@ void loop_button(){
       
       }
   
-  
-  }
-
-//Simulate the heater heating up the air
-void loop_mock_heating(){
-
-  if(digitalRead(HEATER) == HIGH){
-
-    current_temperature++;
-    
-    }else{
-      
-    if (current_temperature > 20) current_temperature--;
-      
-      }
   
   }
 
@@ -456,6 +457,59 @@ void activate_buzzer(int width, int gap, int count, int strength){
   Serial.print("ms at ");
   Serial.print(gap);
   Serial.println("ms apart");
+  
+  }
+
+void loop_display(){
+
+  if(state == MENU){
+    
+    display.clearDisplay();
+    display.println("COMPOSTER TOM");
+    display.println("-------------");
+    display.print("Temp(C): ");
+    display.println(current_temperature, 1); // one decimal place
+    display.println("Press to start cycle");
+    display.display();
+    
+    }else{
+      
+      unsigned long currentMillis = cycle_duration - (cycle_total_elapsed + cycle_last_elapsed);
+      unsigned long seconds = currentMillis / 1000;
+      unsigned long minutes = seconds / 60;
+      unsigned long hours = minutes / 60;
+      unsigned long days = hours / 24;
+      currentMillis %= 1000;
+      seconds %= 60;
+      minutes %= 60;
+      hours %= 24;
+    
+      display.clearDisplay();
+      display.println("COMPOSTER TOM");
+      display.println("-------------");
+      display.print("Temp(C): ");
+      display.println(current_temperature, 1); // one decimal place
+      display.print("Time: ");
+      if(hours > 0){
+        display.print(hours);
+        display.print(":");
+        }
+      if(minutes > 0){
+        if(minutes < 10){
+          display.print("0");
+          }
+        display.print(minutes);
+        display.print(":");
+        }
+      if(seconds > 0){
+        if(seconds < 10){
+          display.print("0");
+          }
+        display.println(seconds); 
+      }
+      display.display();
+      
+      }
   
   }
 
